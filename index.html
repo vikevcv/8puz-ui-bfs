@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mô phỏng 3 biến thể BFS 8-Puzzle (Giao diện Chạy Tay)</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        h1 { text-align: center; color: #2c3e50; }
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; justify-content: center; width: 100%; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        select, button { padding: 10px 15px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; cursor: pointer; }
+        select { min-width: 350px; font-weight: bold; color: #2c3e50; }
+        button { background-color: #3498db; color: white; border: none; font-weight: bold; transition: background 0.3s; }
+        button:hover { background-color: #2980b9; }
+        button:disabled { background-color: #95a5a6; cursor: not-allowed; }
+        .btn-success { background-color: #2ecc71; }
+        .btn-success:hover { background-color: #27ae60; }
+        .btn-warning { background-color: #f39c12; }
+        .btn-warning:hover { background-color: #e67e22; }
+        
+        .boards-container { display: flex; justify-content: space-around; margin-bottom: 20px; flex-wrap: wrap; }
+        .board-wrapper { text-align: center; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin: 5px; }
+        .board { display: grid; grid-template-columns: repeat(3, 50px); grid-gap: 5px; background: #34495e; padding: 5px; border-radius: 5px; margin-top: 10px; margin-left: auto; margin-right: auto; }
+        .cell { width: 50px; height: 50px; background: #ecf0f1; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; color: #2c3e50; border-radius: 3px; }
+        .cell.empty { background: #34495e; color: transparent; }
+        
+        /* CSS cho bảng Log chạy tay */
+        .log-container { margin-top: 20px; width: 100%; max-width: 1300px; margin-left: auto; margin-right: auto; overflow-x: auto; }
+        .log-table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .log-table th, .log-table td { border: 1px solid #ddd; padding: 15px 10px; text-align: left; vertical-align: top; }
+        .log-table th { background-color: #2c3e50; color: white; text-align: center; font-size: 18px;}
+        
+        /* CSS cho Mini Matrix (Matrix thu nhỏ trong bảng) */
+        .mini-board { display: inline-grid; grid-template-columns: repeat(3, 22px); gap: 1px; background: #2c3e50; padding: 2px; border-radius: 3px; vertical-align: middle; margin: 0 4px; }
+        .mini-cell { width: 22px; height: 22px; background: white; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; color: #333; }
+        .mini-cell.empty { background: #2c3e50; color: transparent; }
+        
+        /* Cấu trúc hiển thị các item trong bảng */
+        .frontier-item { margin-bottom: 15px; font-family: monospace; font-size: 16px; display: flex; align-items: center; flex-wrap: wrap; }
+        .reached-box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 24px; font-weight: bold; color: #555; max-height: 400px; overflow-y: auto; }
+        .node-col-content { display: flex; flex-direction: column; align-items: center; font-size: 18px; font-weight: bold;}
+        
+        /* CSS hiển thị kết quả */
+        .success-box { background-color: #dff0d8; color: #3c763d; border: 1px solid #d6e9c6; padding: 15px; border-radius: 5px; margin-top: 15px; text-align: left; font-size: 16px; line-height: 1.6; }
+    </style>
+</head>
+<body>
+
+    <h1>Mô phỏng "Chạy Tay" 3 Phiên bản BFS</h1>
+    
+    <div class="controls">
+        <label for="algoSelect"><b>Phiên bản Thuật toán:</b></label>
+        <select id="algoSelect">
+            <option value="IMG1">Ảnh 1: BFS Tối ưu (Early Goal Test + Reached Sớm)</option>
+            <option value="IMG2">Ảnh 2: BFS Cổ điển (Early Goal Test + Explored Muộn)</option>
+            <option value="IMG3">Ảnh 3: BFS Generic (Late Goal Test + Reached Muộn)</option>
+        </select>
+        <button id="btnStart" onclick="initSearch()">Khởi tạo / Reset</button>
+        <button id="btnStep" class="btn-warning" onclick="stepSearch()" disabled>Chạy 1 Bước (Next Step)</button>
+        <button id="btnAuto" class="btn-success" onclick="autoRun()" disabled>Chạy Tự Động</button>
+    </div>
+
+    <div class="boards-container">
+        <div class="board-wrapper">
+            <h3>Trạng thái Đầu (INITIAL)</h3>
+            <div id="startBoard" class="board"></div>
+        </div>
+        <div class="board-wrapper" style="flex: 1.5;">
+            <h3>Trạng thái Đang Xét</h3>
+            <div id="currentBoard" class="board"></div>
+            <div id="statusMsg" style="margin-top: 10px;"></div>
+        </div>
+        <div class="board-wrapper">
+            <h3>Trạng thái Đích (GOAL)</h3>
+            <div id="goalBoard" class="board"></div>
+        </div>
+    </div>
+
+    <div class="log-container">
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th style="width: 15%">Node (Lấy ra)</th>
+                    <th style="width: 45%">Frontier (Sinh ra)</th>
+                    <th style="width: 40%" id="setHeader">Reached</th>
+                </tr>
+            </thead>
+            <tbody id="logBody">
+            </tbody>
+        </table>
+    </div>
+
+<script>
+    const START_STATE = [2, 8, 3, 1, 6, 4, 7, 0, 5];
+    const GOAL_STATE = [1, 2, 3, 8, 0, 4, 7, 6, 5];
+
+    class Node {
+        constructor(state, parent, action, depth, name) {
+            this.state = state;
+            this.parent = parent;
+            this.action = action; // "Up", "Down", "Left", "Right"
+            this.depth = depth;   // Path Cost (Số bước di chuyển)
+            this.name = name;     // Tên Node (A, B, C, D...)
+        }
+        toString() {
+            return this.state.join("");
+        }
+    }
+
+    let frontier = [];
+    let stateSet = new Set();
+    let isSolved = false;
+    let currentAlgo = "";
+    let autoInterval = null;
+    
+    let nodeCounter = 0; 
+    let expandCount = 0; // Biến đếm số lần duyệt node
+
+    function getNextNodeName() {
+        let name = "";
+        let num = nodeCounter++;
+        let letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        if (num < 26) return letters[num];
+        return letters[Math.floor(num/26)-1] + letters[num%26];
+    }
+
+    function getNeighbors(node) {
+        const neighbors = [];
+        const state = node.state;
+        const zeroIdx = state.indexOf(0);
+        const row = Math.floor(zeroIdx / 3);
+        const col = zeroIdx % 3;
+
+        const moves = [
+            { r: -1, c: 0, act: "Up" },
+            { r: 1, c: 0, act: "Down" },
+            { r: 0, c: -1, act: "Left" },
+            { r: 0, c: 1, act: "Right" }
+        ];
+
+        for (let move of moves) {
+            let newRow = row + move.r;
+            let newCol = col + move.c;
+            
+            if (newRow >= 0 && newRow < 3 && newCol >= 0 && newCol < 3) {
+                let newIdx = newRow * 3 + newCol;
+                let newState = [...state];
+                [newState[zeroIdx], newState[newIdx]] = [newState[newIdx], newState[zeroIdx]];
+                neighbors.push(new Node(newState, node, move.act, node.depth + 1, ""));
+            }
+        }
+        return neighbors;
+    }
+
+    function isGoal(state) {
+        return state.join("") === GOAL_STATE.join("");
+    }
+
+    // Hàm truy xuất ngược để lấy danh sách các bước di chuyển
+    function tracePath(goalNode) {
+        let path = [];
+        let curr = goalNode;
+        while (curr !== null) {
+            path.unshift(curr); // Đẩy vào đầu mảng
+            curr = curr.parent;
+        }
+        return path;
+    }
+
+    // Hiển thị thông báo thành công kèm thống kê số bước
+    function showSuccess(goalNode, testType) {
+        isSolved = true;
+        let path = tracePath(goalNode);
+        let pathStr = path.map(n => `<b>${n.name}</b>${n.action !== "Start" ? ` (${n.action.charAt(0)})` : ""}`).join(" &rarr; ");
+
+        let html = `
+            <div class="success-box">
+                <strong style="font-size:18px;">🎉 Đã giải xong! (${testType})</strong><br><br>
+                <b>Đích tìm thấy tại:</b> Node ${goalNode.name}<br>
+                <b>Số bước di chuyển (Cost):</b> ${goalNode.depth} bước<br>
+                <b>Tổng số Node đã duyệt (Pop):</b> ${expandCount} node<br>
+                <b>Đường đi:</b> ${pathStr}
+            </div>
+        `;
+        document.getElementById("statusMsg").innerHTML = html;
+        disableBtns();
+    }
+
+    function renderBoard(boardId, state) {
+        const board = document.getElementById(boardId);
+        board.innerHTML = "";
+        for (let i = 0; i < 9; i++) {
+            const cell = document.createElement("div");
+            cell.className = "cell" + (state[i] === 0 ? " empty" : "");
+            cell.innerText = state[i] === 0 ? "" : state[i];
+            board.appendChild(cell);
+        }
+    }
+
+    function getMiniBoardHTML(stateArr) {
+        let html = '<div class="mini-board">';
+        for(let i=0; i<9; i++) {
+            let val = stateArr[i] === 0 ? "" : stateArr[i];
+            html += `<div class="mini-cell ${val===''?'empty':''}">${val}</div>`;
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function updateLog(currNode, frontierLogsHTML) {
+        const tbody = document.getElementById("logBody");
+        const tr = document.createElement("tr");
+
+        let nodeHTML = "N/A";
+        if (currNode) {
+            nodeHTML = `<div class="node-col-content"><span>Node ${currNode.name}</span><br>${getMiniBoardHTML(currNode.state)}</div>`;
+        }
+
+        let frontierCol = frontierLogsHTML.join("");
+        if(frontierLogsHTML.length === 0) frontierCol = "<i>(Không sinh thêm node mới)</i>";
+
+        let reachedHTML = '<div class="reached-box">[ ';
+        let rArray = Array.from(stateSet);
+        for (let i = 0; i < rArray.length; i++) {
+            let stateArr = rArray[i].split('').map(Number);
+            reachedHTML += getMiniBoardHTML(stateArr);
+            if (i < rArray.length - 1) reachedHTML += " , ";
+        }
+        reachedHTML += ' ]</div>';
+
+        tr.innerHTML = `
+            <td>${nodeHTML}</td>
+            <td>${frontierCol}</td>
+            <td>${reachedHTML}</td>
+        `;
+        tbody.prepend(tr); 
+    }
+
+    function initSearch() {
+        clearInterval(autoInterval);
+        document.getElementById("btnAuto").innerText = "Chạy Tự Động";
+        
+        currentAlgo = document.getElementById("algoSelect").value;
+        nodeCounter = 0; 
+        expandCount = 0; // Reset đếm số lần duyệt
+        
+        let startNode = new Node(START_STATE, null, "Start", 0, getNextNodeName());
+        
+        frontier = [startNode];
+        stateSet = new Set();
+        isSolved = false;
+        
+        document.getElementById("logBody").innerHTML = "";
+        document.getElementById("statusMsg").innerHTML = "<span style='font-weight:bold; color:#e74c3c;'>Đang chờ chạy...</span>";
+        document.getElementById("btnStep").disabled = false;
+        document.getElementById("btnAuto").disabled = false;
+
+        renderBoard("startBoard", START_STATE);
+        renderBoard("goalBoard", GOAL_STATE);
+        renderBoard("currentBoard", START_STATE);
+
+        let setName = currentAlgo === "IMG2" ? "Explored" : "Reached";
+        document.getElementById("setHeader").innerText = setName;
+
+        if (currentAlgo === "IMG1") {
+            stateSet.add(startNode.toString());
+            if (isGoal(START_STATE)) {
+                showSuccess(startNode, "Early Goal Test tại gốc");
+            }
+        } else if (currentAlgo === "IMG2" || currentAlgo === "IMG3") {
+            if (isGoal(START_STATE)) {
+                showSuccess(startNode, "Goal Test tại gốc");
+            }
+        }
+    }
+
+    function stepSearch() {
+        if (isSolved || frontier.length === 0) {
+            if(frontier.length === 0) document.getElementById("statusMsg").innerHTML = "<span style='font-weight:bold; color:#e74c3c;'>Thất bại: Hết trạng thái để duyệt!</span>";
+            disableBtns();
+            return;
+        }
+
+        let currentNode = frontier.shift(); 
+        expandCount++; // Tăng biến đếm số Node đã lấy ra xét
+        renderBoard("currentBoard", currentNode.state);
+
+        let frontierLogsHTML = [];
+
+        // ======= LOGIC ẢNH 3 =======
+        if (currentAlgo === "IMG3") {
+            stateSet.add(currentNode.toString()); 
+            
+            if (isGoal(currentNode.state)) {
+                updateLog(currentNode, [`<b style="color:green">Goal Found Here!</b>`]);
+                showSuccess(currentNode, "Ảnh 3 - Late Goal Test");
+                return;
+            }
+
+            let neighbors = getNeighbors(currentNode);
+            for (let child of neighbors) {
+                let childStr = child.toString();
+                let inReached = stateSet.has(childStr);
+                let inFrontier = frontier.some(n => n.toString() === childStr);
+                
+                if (!inReached && !inFrontier) {
+                    child.name = getNextNodeName();
+                    frontier.push(child);
+                    let actionChar = child.action.charAt(0).toUpperCase();
+                    frontierLogsHTML.push(`<div class="frontier-item">{ ${getMiniBoardHTML(child.state)} , ${currentNode.name} , ${actionChar} , ${child.depth} } &rarr; <b>Node ${child.name}</b></div>`);
+                }
+            }
+            updateLog(currentNode, frontierLogsHTML);
+        } 
+        
+        // ======= LOGIC ẢNH 2 =======
+        else if (currentAlgo === "IMG2") {
+            stateSet.add(currentNode.toString()); 
+
+            let neighbors = getNeighbors(currentNode);
+            for (let child of neighbors) {
+                let childStr = child.toString();
+                let inExplored = stateSet.has(childStr);
+                let inFrontier = frontier.some(n => n.toString() === childStr);
+                
+                if (!inExplored && !inFrontier) {
+                    child.name = getNextNodeName();
+                    let actionChar = child.action.charAt(0).toUpperCase();
+                    frontierLogsHTML.push(`<div class="frontier-item">{ ${getMiniBoardHTML(child.state)} , ${currentNode.name} , ${actionChar} , ${child.depth} } &rarr; <b>Node ${child.name}</b></div>`);
+
+                    if (isGoal(child.state)) {
+                        frontierLogsHTML.push(`<b style="color:green; margin-top:10px; display:block;">Goal Found Here!</b>`);
+                        updateLog(currentNode, frontierLogsHTML);
+                        showSuccess(child, "Ảnh 2 - Early Goal Test");
+                        return;
+                    }
+                    frontier.push(child);
+                }
+            }
+            updateLog(currentNode, frontierLogsHTML);
+        }
+
+        // ======= LOGIC ẢNH 1 =======
+        else if (currentAlgo === "IMG1") {
+            let neighbors = getNeighbors(currentNode);
+            for (let child of neighbors) {
+                let childStr = child.toString();
+                
+                if (!stateSet.has(childStr)) {
+                    stateSet.add(childStr); 
+                    child.name = getNextNodeName();
+                    
+                    let actionChar = child.action.charAt(0).toUpperCase();
+                    frontierLogsHTML.push(`<div class="frontier-item">{ ${getMiniBoardHTML(child.state)} , ${currentNode.name} , ${actionChar} , ${child.depth} } &rarr; <b>Node ${child.name}</b></div>`);
+                    
+                    if (isGoal(child.state)) {
+                        frontierLogsHTML.push(`<b style="color:green; margin-top:10px; display:block;">Goal Found Here!</b>`);
+                        updateLog(currentNode, frontierLogsHTML);
+                        showSuccess(child, "Ảnh 1 - Tối ưu Early Goal Test");
+                        return;
+                    }
+                    frontier.push(child);
+                }
+            }
+            updateLog(currentNode, frontierLogsHTML);
+        }
+    }
+
+    function disableBtns() {
+        document.getElementById("btnStep").disabled = true;
+        document.getElementById("btnAuto").disabled = true;
+        clearInterval(autoInterval);
+    }
+
+    function autoRun() {
+        let btn = document.getElementById("btnAuto");
+        if (autoInterval) {
+            clearInterval(autoInterval);
+            autoInterval = null;
+            btn.innerText = "Chạy Tự Động";
+            btn.classList.remove("btn-warning");
+            btn.classList.add("btn-success");
+        } else {
+            btn.innerText = "Tạm Dừng";
+            btn.classList.remove("btn-success");
+            btn.classList.add("btn-warning");
+            autoInterval = setInterval(() => {
+                if(isSolved || frontier.length === 0) {
+                    disableBtns();
+                    btn.innerText = "Chạy Tự Động";
+                    btn.classList.remove("btn-warning");
+                    btn.classList.add("btn-success");
+                } else {
+                    stepSearch();
+                }
+            }, 500); 
+        }
+    }
+
+    window.onload = initSearch;
+</script>
+</body>
+</html>
